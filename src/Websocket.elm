@@ -1,11 +1,10 @@
-effect module Websocket where { command = MyCmd, subscription = MySub } exposing
-    ( Connection
-    , SendError(..)
-    , close
-    , createHandle
-    , listen
-    , sendString
-    )
+effect module Websocket where { command = MyCmd, subscription = MySub } exposing (Connection, SendError(..), close, createHandle, listen, sendString)
+
+{-|
+
+@docs Connection, SendError, close, createHandle, listen, sendString
+
+-}
 
 import Dict exposing (Dict)
 import Elm.Kernel.LamderaWebsocket
@@ -13,15 +12,21 @@ import Process
 import Task exposing (Task)
 
 
+{-| A websocket connection
+-}
 type Connection
     = Connection String String
 
 
+{-| Create a websocket handle that you can then open by calling listen or sendString.
+-}
 createHandle : String -> Task Never Connection
 createHandle url =
     Elm.Kernel.LamderaWebsocket.createHandle () url
 
 
+{-| Errors that might happen when sending data.
+-}
 type SendError
     = ConnectionClosed
 
@@ -31,18 +36,24 @@ connectionClosed =
     ConnectionClosed
 
 
+{-| Send a string
+-}
 sendString : Connection -> String -> Task SendError ()
 sendString connection_ data =
     Elm.Kernel.LamderaWebsocket.sendString () connection_ data
         |> Task.map (\_ -> ())
 
 
+{-| Close the websocket connection
+-}
 close : Connection -> Task Never ()
 close connection_ =
     Elm.Kernel.LamderaWebsocket.close () connection_
         |> Task.map (\_ -> ())
 
 
+{-| Listen for incoming messages through a websocket connection. You'll also get notified if the connection closes.
+-}
 listen : Connection -> (String -> msg) -> msg -> Sub msg
 listen connection_ onData onClose =
     subscription (Listen connection_ onData onClose)
