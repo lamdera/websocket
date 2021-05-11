@@ -1,8 +1,8 @@
-effect module Websocket where { command = MyCmd, subscription = MySub } exposing (Connection, SendError(..), close, createHandle, listen, sendString)
+effect module Websocket where { command = MyCmd, subscription = MySub } exposing (Connection, SendError(..), close, createHandle, listen, sendString, CloseEventCode(..))
 
 {-|
 
-@docs Connection, SendError, close, createHandle, listen, sendString
+@docs Connection, SendError, close, createHandle, listen, sendString, CloseEventCode
 
 -}
 
@@ -31,6 +31,79 @@ type SendError
     = ConnectionClosed
 
 
+{-| Here are some possible reasons that your websocket connection closed.
+-}
+type CloseEventCode
+    = NormalClosure
+    | GoingAway
+    | ProtocolError
+    | UnsupportedData
+    | NoStatusReceived
+    | AbnormalClosure
+    | InvalidFramePayloadData
+    | PolicyViolation
+    | MessageTooBig
+    | MissingExtension
+    | InternalError
+    | ServiceRestart
+    | TryAgainLater
+    | BadGateway
+    | TlsHandshake
+    | UnknownCode Int
+
+
+decodeCloseEventCode : Int -> CloseEventCode
+decodeCloseEventCode code =
+    case code of
+        1000 ->
+            NormalClosure
+
+        1001 ->
+            GoingAway
+
+        1002 ->
+            ProtocolError
+
+        1003 ->
+            UnsupportedData
+
+        1005 ->
+            NoStatusReceived
+
+        1006 ->
+            AbnormalClosure
+
+        1007 ->
+            InvalidFramePayloadData
+
+        1008 ->
+            PolicyViolation
+
+        1009 ->
+            MessageTooBig
+
+        1010 ->
+            MissingExtension
+
+        1011 ->
+            InternalError
+
+        1012 ->
+            ServiceRestart
+
+        1013 ->
+            TryAgainLater
+
+        1014 ->
+            BadGateway
+
+        1015 ->
+            TlsHandshake
+
+        _ ->
+            UnknownCode code
+
+
 connectionClosed : SendError
 connectionClosed =
     ConnectionClosed
@@ -54,7 +127,7 @@ close connection_ =
 
 {-| Listen for incoming messages through a websocket connection. You'll also get notified if the connection closes.
 -}
-listen : Connection -> (String -> msg) -> msg -> Sub msg
+listen : Connection -> (String -> msg) -> (CloseEventCode -> msg) -> Sub msg
 listen connection_ onData onClose =
     subscription (Listen connection_ onData onClose)
 
@@ -65,7 +138,16 @@ init =
 
 
 type alias State msg =
-    { connections : Dict String ( Process.Id, List { onData : String -> msg, onClose : msg } ) }
+    { connections :
+        Dict
+            String
+            ( Process.Id
+            , List
+                { onData : String -> msg
+                , onClose : CloseEventCode -> msg
+                }
+            )
+    }
 
 
 type alias EmMsg =
@@ -74,7 +156,7 @@ type alias EmMsg =
 
 type MyEvent
     = DataEvent String
-    | ClosedEvent
+    | ClosedEvent CloseEventCode
 
 
 dataEvent : String -> MyEvent
@@ -82,9 +164,9 @@ dataEvent =
     DataEvent
 
 
-closedEvent : MyEvent
+closedEvent : Int -> MyEvent
 closedEvent =
-    ClosedEvent
+    decodeCloseEventCode >> ClosedEvent
 
 
 connection : String -> String -> Connection
@@ -92,17 +174,13 @@ connection =
     Connection
 
 
-
---| Closed
-
-
 onSelfMsg : Platform.Router msg EmMsg -> EmMsg -> State msg -> Task Never (State msg)
 onSelfMsg router ( Connection connectionId _, event ) state =
     case Dict.get connectionId state.connections of
         Just ( _, msgs ) ->
             case event of
-                ClosedEvent ->
-                    List.map (\{ onClose } -> Platform.sendToApp router onClose) msgs
+                ClosedEvent closedEventCode ->
+                    List.map (\{ onClose } -> Platform.sendToApp router (onClose closedEventCode)) msgs
                         |> Task.sequence
                         |> Task.map (\_ -> state)
 
@@ -116,7 +194,7 @@ onSelfMsg router ( Connection connectionId _, event ) state =
 
 
 type MySub msg
-    = Listen Connection (String -> msg) msg
+    = Listen Connection (String -> msg) (CloseEventCode -> msg)
 
 
 type MyCmd msg
@@ -170,7 +248,7 @@ subMap : (a -> b) -> MySub a -> MySub b
 subMap func sub =
     case sub of
         Listen url onData onClose ->
-            Listen url (onData >> func) (func onClose)
+            Listen url (onData >> func) (onClose >> func)
 
 
 cmdMap : (a -> b) -> MyCmd a -> MyCmd b

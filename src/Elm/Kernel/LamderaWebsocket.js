@@ -31,6 +31,8 @@ var _LamderaWebsocket_createHandle = F2(function(router, url)
             , isClosed : false
             }
 
+        console.log("Websocket: created handle");
+
         callback(__Scheduler_succeed(
             A2(__Websocket_connection, id, url)
         ));
@@ -50,7 +52,17 @@ var _LamderaWebsocket_sendString = F3(function(router, connection, data)
             }
             else {
                 websocketData.websocket = new WebSocket(connection.b);
+
+                websocketData.websocket.addEventListener('close', function (event) {
+                    websocketData.websocket.isClosed = true;
+                    console.log("Websocket: close happened in _LamderaWebsocket_sendString");
+                    console.log(event);
+                });
+
                 websocketData.websocket.addEventListener('open', function (event) {
+                    console.log("open");
+                    console.log(event);
+
                     websocketData.websocket.send(data);
                 });
 
@@ -71,6 +83,17 @@ var _LamderaWebsocket_listen = F2(function(router, connection)
 
         function addListener() {
             websocketData.hasListener = true;
+
+            websocketData.websocket.addEventListener('close', function (event) {
+                websocketData.websocket.isClosed = true;
+                console.log("Websocket: close happened in _LamderaWebsocket_listen");
+                console.log(event);
+                __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, __Utils_Tuple2(
+                    connection,
+                    __Websocket_closedEvent(event.close)
+                )));
+            });
+
             websocketData.websocket.addEventListener('message', function (event) {
                 __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, __Utils_Tuple2(
                     connection,
@@ -100,7 +123,7 @@ var _LamderaWebsocket_listen = F2(function(router, connection)
                 }
             __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, __Utils_Tuple2(
                 connection,
-                __Websocket_closedEvent
+                __Websocket_closedEvent(1005)
             )));
         }
 
@@ -111,6 +134,9 @@ var _LamderaWebsocket_close = F2(function(router, connection) {
     return __Scheduler_binding(function(callback)
     {
         var websocketData = _LamderaWebsocket_websockets[connection.a];
+
+        console.log("Websocket: connection closed by user");
+
         if (websocketData) {
             websocketData.websocket.close();
             websocketData.isClosed = true;
