@@ -122,7 +122,6 @@ var _LamderaWebsocket_listen = F2(function(router, connection)
                 , isClosed : true
                 }
             console.log("Websocket: close happened due to reset");
-            console.log(event);
             __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, __Utils_Tuple2(
                 connection,
                 A2(__Websocket_closedEvent, 1005, "")
