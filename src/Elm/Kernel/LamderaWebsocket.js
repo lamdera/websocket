@@ -90,7 +90,7 @@ var _LamderaWebsocket_listen = F2(function(router, connection)
                 console.log(event);
                 __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, __Utils_Tuple2(
                     connection,
-                    __Websocket_closedEvent(event.close)
+                    A2(__Websocket_closedEvent, event.code, event.reason)
                 )));
             });
 
@@ -121,9 +121,11 @@ var _LamderaWebsocket_listen = F2(function(router, connection)
                 , hasListener : false
                 , isClosed : true
                 }
+            console.log("Websocket: close happened due to reset");
+            console.log(event);
             __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, __Utils_Tuple2(
                 connection,
-                __Websocket_closedEvent(1005)
+                A2(__Websocket_closedEvent, 1005, "")
             )));
         }
 

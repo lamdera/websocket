@@ -127,7 +127,7 @@ close connection_ =
 
 {-| Listen for incoming messages through a websocket connection. You'll also get notified if the connection closes.
 -}
-listen : Connection -> (String -> msg) -> (CloseEventCode -> msg) -> Sub msg
+listen : Connection -> (String -> msg) -> ({ code : CloseEventCode, reason : String } -> msg) -> Sub msg
 listen connection_ onData onClose =
     subscription (Listen connection_ onData onClose)
 
@@ -144,19 +144,19 @@ type alias State msg =
             ( Process.Id
             , List
                 { onData : String -> msg
-                , onClose : CloseEventCode -> msg
+                , onClose : { code : CloseEventCode, reason : String } -> msg
                 }
             )
     }
 
 
-type alias EmMsg =
+type alias SelfMsg =
     ( Connection, MyEvent )
 
 
 type MyEvent
     = DataEvent String
-    | ClosedEvent CloseEventCode
+    | ClosedEvent { code : CloseEventCode, reason : String }
 
 
 dataEvent : String -> MyEvent
@@ -164,9 +164,9 @@ dataEvent =
     DataEvent
 
 
-closedEvent : Int -> MyEvent
-closedEvent =
-    decodeCloseEventCode >> ClosedEvent
+closedEvent : Int -> String -> MyEvent
+closedEvent code reason =
+    ClosedEvent { code = decodeCloseEventCode code, reason = reason }
 
 
 connection : String -> String -> Connection
@@ -174,13 +174,13 @@ connection =
     Connection
 
 
-onSelfMsg : Platform.Router msg EmMsg -> EmMsg -> State msg -> Task Never (State msg)
+onSelfMsg : Platform.Router msg SelfMsg -> SelfMsg -> State msg -> Task Never (State msg)
 onSelfMsg router ( Connection connectionId _, event ) state =
     case Dict.get connectionId state.connections of
         Just ( _, msgs ) ->
             case event of
-                ClosedEvent closedEventCode ->
-                    List.map (\{ onClose } -> Platform.sendToApp router (onClose closedEventCode)) msgs
+                ClosedEvent data ->
+                    List.map (\{ onClose } -> Platform.sendToApp router (onClose data)) msgs
                         |> Task.sequence
                         |> Task.map (\_ -> state)
 
@@ -194,7 +194,7 @@ onSelfMsg router ( Connection connectionId _, event ) state =
 
 
 type MySub msg
-    = Listen Connection (String -> msg) (CloseEventCode -> msg)
+    = Listen Connection (String -> msg) ({ code : CloseEventCode, reason : String } -> msg)
 
 
 type MyCmd msg
@@ -204,7 +204,7 @@ type MyCmd msg
 
 
 onEffects :
-    Platform.Router msg EmMsg
+    Platform.Router msg SelfMsg
     -> List (MyCmd msg)
     -> List (MySub msg)
     -> State msg
