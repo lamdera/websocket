@@ -23,6 +23,8 @@ var _LamderaWebsocket_createHandle = F2(function(router, url)
 {
 	return __Scheduler_binding(function(callback)
 	{
+	    try {
+
 	    var id = _LamderaWebsocket_uuid4();
 
 	    _LamderaWebsocket_websockets[id] =
@@ -36,6 +38,11 @@ var _LamderaWebsocket_createHandle = F2(function(router, url)
         callback(__Scheduler_succeed(
             A2(__Websocket_connection, id, url)
         ));
+
+        }
+        catch (error) {
+            console.log("Websocket: Exception in _LamderaWebsocket_createHandle. " + error);
+        }
 	});
 });
 
@@ -45,6 +52,8 @@ var _LamderaWebsocket_sendString = F3(function(router, connection, data)
 {
 	return __Scheduler_binding(function(callback)
 	{
+	    try {
+
 	    var websocketData = _LamderaWebsocket_websockets[connection.a];
 	    if (websocketData || websocketData.isClosed) {
 	        if (websocketData.websocket) {
@@ -54,16 +63,30 @@ var _LamderaWebsocket_sendString = F3(function(router, connection, data)
                 websocketData.websocket = new WebSocket(connection.b);
 
                 websocketData.websocket.addEventListener('close', function (event) {
+                    try {
+
                     websocketData.websocket.isClosed = true;
                     console.log("Websocket: close happened in _LamderaWebsocket_sendString");
                     console.log(event);
+
+                    }
+                    catch (error) {
+                        console.log("Websocket: Exception in _LamderaWebsocket_sendString close listener. " + error);
+                    }
                 });
 
                 websocketData.websocket.addEventListener('open', function (event) {
+                    try {
+
                     console.log("open");
                     console.log(event);
 
                     websocketData.websocket.send(data);
+
+                    }
+                    catch (error) {
+                        console.log("Websocket: Exception in _LamderaWebsocket_sendString open listener. " + error);
+                    }
                 });
 
                 callback(__Scheduler_succeed(0));
@@ -72,6 +95,12 @@ var _LamderaWebsocket_sendString = F3(function(router, connection, data)
 	    else {
 	        callback(__Scheduler_fail(__Websocket_connectionClosed));
 	    }
+
+
+        }
+        catch (error) {
+            console.log("Websocket: Exception in _LamderaWebsocket_sendString. " + error);
+        }
 	});
 });
 
@@ -79,12 +108,15 @@ var _LamderaWebsocket_listen = F2(function(router, connection)
 {
 	return __Scheduler_binding(function(callback)
 	{
+	    try {
         var websocketData = _LamderaWebsocket_websockets[connection.a];
 
         function addListener() {
             websocketData.hasListener = true;
 
             websocketData.websocket.addEventListener('close', function (event) {
+                try {
+
                 websocketData.websocket.isClosed = true;
                 console.log("Websocket: close happened in _LamderaWebsocket_listen");
                 console.log(event);
@@ -92,13 +124,26 @@ var _LamderaWebsocket_listen = F2(function(router, connection)
                     connection,
                     A2(__Websocket_closedEvent, event.code, event.reason)
                 )));
+
+                }
+                catch (error) {
+                    console.log("Websocket: Exception in _LamderaWebsocket_listen close listener. " + error);
+                }
+
             });
 
             websocketData.websocket.addEventListener('message', function (event) {
+                try {
+
                 __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, __Utils_Tuple2(
                     connection,
                     __Websocket_dataEvent(event.data)
                 )));
+
+                }
+                catch (error) {
+                    console.log("Websocket: Exception in _LamderaWebsocket_listen message listener. " + error);
+                }
             });
         }
 
@@ -128,12 +173,19 @@ var _LamderaWebsocket_listen = F2(function(router, connection)
             )));
         }
 
+        }
+        catch (error) {
+            console.log("Websocket: Exception in _LamderaWebsocket_listen. " + error);
+        }
+
 	});
 });
 
 var _LamderaWebsocket_close = F2(function(router, connection) {
     return __Scheduler_binding(function(callback)
     {
+        try {
+
         var websocketData = _LamderaWebsocket_websockets[connection.a];
 
         console.log("Websocket: connection closed by user");
@@ -146,6 +198,11 @@ var _LamderaWebsocket_close = F2(function(router, connection) {
         }
         else {
             callback(__Scheduler_succeed(0));
+        }
+
+        }
+        catch (error) {
+            console.log("Websocket: Exception in _LamderaWebsocket_close. " + error);
         }
     });
 });
