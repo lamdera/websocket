@@ -1,8 +1,8 @@
-effect module Websocket where { command = MyCmd, subscription = MySub } exposing (Connection, SendError(..), close, createHandle, listen, sendString, CloseEventCode(..))
+effect module Websocket where { command = MyCmd, subscription = MySub } exposing (Connection, SendError(..), close, createHandle, findOrCreateHandle, listen, sendString, CloseEventCode(..))
 
 {-|
 
-@docs Connection, SendError, close, createHandle, listen, sendString, CloseEventCode
+@docs Connection, SendError, close, createHandle, findOrCreateHandle, listen, sendString, CloseEventCode
 
 -}
 
@@ -18,11 +18,30 @@ type Connection
     = Connection String String
 
 
-{-| Create a websocket handle that you can then open by calling listen or sendString.
+{-| Create a websocket handle that you can then open by calling `listen` or `sendString`.
+
+Each handle is unique, so you can have multiple open connections at once to the same URL by using `createHandle` multiple times.
+
+It is your responsibility to hold onto the `Connection` value, if you lose it you will not be able to explicitly close the connection.
+
+If you know you will only need a discrete number of connections, you can use `findOrCreateHandle`.
+
 -}
 createHandle : String -> Task Never Connection
 createHandle url =
     Elm.Kernel.LamderaWebsocket.createHandle () url
+
+
+{-| Find or create a websocket handle with a given namespace that you can then open by calling `listen` or `sendString`.
+
+Each handle is unique by its namespace, so calling `findOrCreateHandle` multiple times with the same namespace and URL will return the same `Connection` handle.
+
+If you want an automatic unique namespace per `Connection`, use `createHandle` instead.
+
+-}
+findOrCreateHandle : String -> String -> Task Never Connection
+findOrCreateHandle namespace url =
+    Elm.Kernel.LamderaWebsocket.createHandle namespace url
 
 
 {-| Errors that might happen when sending data.
