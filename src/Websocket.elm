@@ -38,6 +38,8 @@ Each handle is unique by its namespace, so calling `findOrCreateHandle` multiple
 
 If you want an automatic unique namespace per `Connection`, use `createHandle` instead.
 
+This is useful in the scenario where you need a specific connection, but don't really care about keeping track of it in your application, so you can use `findOrCreateHandle` to retrieve the `Connection` value again anytime you need to send something.
+
 -}
 findOrCreateHandle : String -> String -> Task Never Connection
 findOrCreateHandle namespace url =
