@@ -150,9 +150,11 @@ var _LamderaWebsocket_listen = F2(function(router, connection)
                 websocketData.websocket.isClosed = true;
                 console.log("Websocket: error happened in _LamderaWebsocket_listen");
                 console.log(event);
+                // Error events are not CloseEvents — they don't have .code/.reason.
+                // Use 1006 (AbnormalClosure) as the appropriate fallback.
                 __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, __Utils_Tuple2(
                     connection,
-                    A2(__Websocket_closedEvent, event.code, event.reason)
+                    A2(__Websocket_closedEvent, event.code || 1006, event.reason || "")
                 )));
 
                 }
