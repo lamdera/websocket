@@ -7,6 +7,7 @@
 // addEventListener shim hands it ws's own Event classes.
 //
 //   node node/backend.mjs     (after `node build.mjs`; exits 1 on any failure)
+//   WS_GREP=regex             only the scenarios whose name matches
 //
 // The runtime installs process-wide uncaughtException and unhandledRejection
 // handlers that log and carry on, so an exception escaping the kernel does not
@@ -64,6 +65,7 @@ let passed = 0;
 
 for (const version of selectedVersions()) {
   for (const scenario of scenarios) {
+    if (process.env.WS_GREP && !new RegExp(process.env.WS_GREP).test(scenario.name)) continue;
     const title = `[node-${version}] ${scenario.name}`;
     try {
       const tid = `node-${version}-${tidCounter++}-${Date.now()}`;
