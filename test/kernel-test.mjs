@@ -1,5 +1,6 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 // --- Stubs for Elm Kernel internals ---
 
@@ -49,138 +50,39 @@ class MockWebSocket {
   }
 }
 
-// --- Build kernel functions with stubs injected ---
+// --- Load the real kernel file with stubs injected ---
+//
+// src/Elm/Kernel/LamderaWebsocket.js is evaluated as is, with the Elm kernel
+// names it uses (__Scheduler_binding and friends), WebSocket and console passed
+// in as parameters, so these tests exercise the code the compiler ships rather
+// than a copy of it.
 
-function loadKernel(stubs) {
-  const origLog = console.log;
+const kernelSource = readFileSync(new URL('../src/Elm/Kernel/LamderaWebsocket.js', import.meta.url), 'utf8');
+
+function loadKernel(stubs, WebSocketImpl = MockWebSocket) {
   const logs = [];
-  console.log = (...args) => { logs.push(args.join(' ')); };
-
-  const {
-    __Scheduler_binding, __Scheduler_succeed, __Scheduler_fail,
-    __Scheduler_rawSpawn, __Platform_sendToSelf, __Utils_Tuple2,
-    __Websocket_connection, __Websocket_closedEvent, __Websocket_dataEvent,
-    __Websocket_connectionClosed,
-  } = stubs;
-
-  const _LamderaWebsocket_websockets = {};
-
-  const _LamderaWebsocket_uuid4 = () =>
-    'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-      const r = Math.random() * 16 | 0;
-      return (c == 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-    });
-
-  const _LamderaWebsocket_createHandle = F2(function(router, url) {
-    return __Scheduler_binding(function(callback) {
-      try {
-        var id = _LamderaWebsocket_uuid4();
-        _LamderaWebsocket_websockets[id] =
-          { websocket: null, hasListener: false, isClosed: false };
-        callback(__Scheduler_succeed(
-          A2(__Websocket_connection, id, url)
-        ));
-      } catch (error) {
-        logs.push("createHandle error: " + error);
-      }
-    });
-  });
-
-  const _LamderaWebsocket_listen = F2(function(router, connection) {
-    return __Scheduler_binding(function(callback) {
-      try {
-        var websocketData = _LamderaWebsocket_websockets[connection.a];
-
-        function addListener() {
-          websocketData.hasListener = true;
-
-          websocketData.websocket.addEventListener('close', function (event) {
-            try {
-              websocketData.websocket.isClosed = true;
-              __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, A2(__Utils_Tuple2,
-                connection,
-                A2(__Websocket_closedEvent, event.code, event.reason)
-              )));
-            } catch (error) {
-              logs.push("listen close error: " + error);
-            }
-          });
-
-          websocketData.websocket.addEventListener('error', function (event) {
-            try {
-              websocketData.websocket.isClosed = true;
-              __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, A2(__Utils_Tuple2,
-                connection,
-                A2(__Websocket_closedEvent, event.code || 1006, event.reason || "")
-              )));
-            } catch (error) {
-              logs.push("listen error error: " + error);
-            }
-          });
-
-          websocketData.websocket.addEventListener('message', function (event) {
-            try {
-              __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, A2(__Utils_Tuple2,
-                connection,
-                __Websocket_dataEvent(event.data)
-              )));
-            } catch (error) {
-              logs.push("listen message error: " + error);
-            }
-          });
-        }
-
-        if (websocketData) {
-          if (websocketData.isClosed === false) {
-            if (websocketData.websocket) {
-              if (websocketData.hasListener === false) {
-                addListener();
-              }
-            } else {
-              websocketData.websocket = new MockWebSocket(connection.b);
-              addListener();
-            }
-          }
-        } else {
-          _LamderaWebsocket_websockets[connection.a] =
-            { websocket: null, hasListener: false, isClosed: true };
-          __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, A2(__Utils_Tuple2,
-            connection,
-            A2(__Websocket_closedEvent, 1005, "")
-          )));
-        }
-      } catch (error) {
-        logs.push("listen error: " + error);
-      }
-    });
-  });
-
-  const _LamderaWebsocket_close = F2(function(router, connection) {
-    return __Scheduler_binding(function(callback) {
-      try {
-        var websocketData = _LamderaWebsocket_websockets[connection.a];
-        if (websocketData) {
-          websocketData.websocket.close();
-          websocketData.isClosed = true;
-          callback(__Scheduler_succeed(0));
-        } else {
-          callback(__Scheduler_succeed(0));
-        }
-      } catch (error) {
-        logs.push("close error: " + error);
-      }
-    });
-  });
-
-  console.log = origLog;
-
-  return {
-    websockets: _LamderaWebsocket_websockets,
-    createHandle: _LamderaWebsocket_createHandle,
-    listen: _LamderaWebsocket_listen,
-    close: _LamderaWebsocket_close,
-    logs,
+  const fakeConsole = {
+    log: (...args) => {
+      const text = args.map(String).join(' ');
+      // Only the kernel's "Exception in ..." lines: those are swallowed errors.
+      if (text.includes('Exception')) logs.push(text);
+    },
   };
+
+  const names = Object.keys(stubs).filter((k) => k.startsWith('__'));
+  const factory = new Function(
+    'F2', 'F3', 'A2', 'A3', 'WebSocket', 'console', ...names,
+    kernelSource + `
+    return {
+      websockets: _LamderaWebsocket_websockets,
+      createHandle: _LamderaWebsocket_createHandle,
+      sendString: _LamderaWebsocket_sendString,
+      listen: _LamderaWebsocket_listen,
+      close: _LamderaWebsocket_close,
+    };`,
+  );
+
+  return { ...factory(F2, F3, A2, A3, WebSocketImpl, fakeConsole, ...names.map((n) => stubs[n])), logs };
 }
 
 // Helper: create a handle and return connection
