@@ -1,0 +1,15 @@
+{
+  "name": "lamdera-websocket-browser-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "playwright test",
+    "test:node": "node node/backend.mjs",
+    "report": "node report.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "ws": "7.4.4"
+  }
+}

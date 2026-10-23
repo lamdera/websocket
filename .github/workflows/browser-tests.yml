@@ -1,0 +1,95 @@
+# Real-browser tests: the harness app in test/browser compiled with the lamdera
+# compiler against every lamdera/websocket version in test/browser/versions.mjs,
+# then driven through Playwright in Chromium, Firefox and WebKit, and under Node
+# with the `ws` client a Lamdera backend uses. See test/browser/scenarios.mjs.
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+name: Browser tests
+
+env:
+  LAMDERA_NPM_VERSION: 0.19.1-1.4.0
+
+jobs:
+  browser:
+    name: ${{ matrix.browser }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    defaults:
+      run:
+        working-directory: test/browser
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # build.mjs reads the older versions out of git history.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/cache@v4
+        with:
+          path: test/browser/.elm-home
+          key: elm-home-${{ hashFiles('test/browser/app/elm.json') }}
+
+      - run: npm ci
+      - run: npm install --no-save lamdera@${{ env.LAMDERA_NPM_VERSION }}
+      - run: LAMDERA=$PWD/node_modules/.bin/lamdera node build.mjs
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Run the matrix
+        run: npx playwright test
+        env:
+          WS_BROWSERS: ${{ matrix.browser }}
+
+      - name: Summary
+        if: always()
+        run: node report.mjs >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-${{ matrix.browser }}
+          path: test/browser/results
+
+  node:
+    name: node (ws)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: test/browser
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/cache@v4
+        with:
+          path: test/browser/.elm-home
+          key: elm-home-${{ hashFiles('test/browser/app/elm.json') }}
+
+      - run: npm ci
+      - run: npm install --no-save lamdera@${{ env.LAMDERA_NPM_VERSION }}
+      - run: LAMDERA=$PWD/node_modules/.bin/lamdera node build.mjs
+      - run: node node/backend.mjs
+
+      - name: Summary
+        if: always()
+        run: node report.mjs >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-node
+          path: test/browser/results

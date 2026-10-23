@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.elm-home/
+app/elm-stuff/
+test-results/
+playwright-report/
+results/
