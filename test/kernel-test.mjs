@@ -151,11 +151,16 @@ describe('LamderaWebsocket Kernel', () => {
       assert.equal(inner.b.reason, 'Normal closure');
     });
 
+    // A failed connection fires `error` and then `close` (the HTML spec, and
+    // node's ws). The app must get exactly one close message, from `close`.
     it('handles browser-style error event (no code/reason)', () => {
       const conn = createConnection(stubs, kernel);
       const ws = listenOn(stubs, kernel, conn);
 
       ws._emit('error', { type: 'error' });
+      assert.equal(stubs.spawned.length, 0, 'the error event alone sends nothing');
+
+      ws._emit('close', { code: 1006, reason: '' });
 
       assert.equal(stubs.spawned.length, 1);
       const inner = stubs.spawned[0].msg;
@@ -170,6 +175,7 @@ describe('LamderaWebsocket Kernel', () => {
       const ws = listenOn(stubs, kernel, conn);
 
       ws._emit('error', new Error('ECONNRESET'));
+      ws._emit('close', { code: 1006, reason: '' });
 
       assert.equal(stubs.spawned.length, 1);
       const inner = stubs.spawned[0].msg;
@@ -259,7 +265,9 @@ describe('LamderaWebsocket Kernel', () => {
       const ws = listenOn(stubs, kernel, conn);
 
       ws._emit('error', { code: 1001, reason: 'Going away' });
+      ws._emit('close', { code: 1001, reason: 'Going away' });
 
+      assert.equal(stubs.spawned.length, 1);
       const inner = stubs.spawned[0].msg;
       assert.equal(inner.b.code, 1001);
       assert.equal(inner.b.reason, 'Going away');
@@ -271,9 +279,7 @@ describe('LamderaWebsocket Kernel', () => {
 
       ws._emit('error', {});
 
-      const inner = stubs.spawned[0].msg;
-      assert.equal(inner.b.code, 1006);
-      assert.equal(inner.b.reason, '');
+      assert.equal(stubs.spawned.length, 0, 'the error event alone sends nothing');
       assert.equal(kernel.logs.length, 0, 'should not throw');
     });
   });

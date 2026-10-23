@@ -152,10 +152,15 @@ var _LamderaWebsocket_listen = F2(function(router, connection)
                 console.log(event);
                 // Error events are not CloseEvents — they don't have .code/.reason.
                 // Use 1006 (AbnormalClosure) as the appropriate fallback.
-                __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, __Utils_Tuple2(
-                    connection,
-                    A2(__Websocket_closedEvent, event.code || 1006, event.reason || "")
-                )));
+                //
+                // That fallback was for a close message sent from here, and it
+                // is no longer sent: an error event is always followed by a
+                // close event (browsers and node's ws alike), which the close
+                // listener above reports with the real code and reason (1006
+                // for a failed connection), so the app got two close messages
+                // for one connection. This listener still matters though: on a
+                // Lamdera backend WebSocket is node's ws, which throws an error
+                // event nobody listens to and then never fires close at all.
 
                 }
                 catch (error) {
