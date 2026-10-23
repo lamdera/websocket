@@ -213,6 +213,29 @@ describe('LamderaWebsocket Kernel', () => {
       assert.equal(inner.b.data, 'hello world');
     });
 
+    it('decodes binary messages as UTF-8 text', () => {
+      const conn = createConnection(stubs, kernel);
+      const ws = listenOn(stubs, kernel, conn);
+      assert.equal(ws.binaryType, 'arraybuffer');
+
+      ws._emit('message', { data: new TextEncoder().encode('héllo').buffer });
+      ws._emit('message', { data: Buffer.from([0xde, 0xad, 0xbe, 0xef]) });
+
+      assert.equal(stubs.spawned.length, 2);
+      assert.equal(stubs.spawned[0].msg.b.data, 'héllo');
+      assert.equal(stubs.spawned[1].msg.b.data, '\u07ad\ufffd\ufffd');
+    });
+
+    it('drops a binary message it cannot decode rather than hand Elm a non-string', () => {
+      const conn = createConnection(stubs, kernel);
+      const ws = listenOn(stubs, kernel, conn);
+
+      ws._emit('message', { data: new Blob(['x']) });
+
+      assert.equal(stubs.spawned.length, 0);
+      assert.equal(kernel.logs.length, 0, 'should not throw');
+    });
+
     it('sends 1005 closedEvent for unknown connection (reset)', () => {
       const fakeConn = { a: 'nonexistent-id', b: 'ws://localhost' };
       const router = {};

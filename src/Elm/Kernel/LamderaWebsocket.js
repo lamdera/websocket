@@ -48,6 +48,24 @@ var _LamderaWebsocket_createHandle = F2(function(router, url)
 
 
 
+// The API only has String, so a binary message is decoded as UTF-8 text
+// (invalid bytes become U+FFFD). It used to hand Elm the Blob (browsers) or
+// Buffer (node's ws) itself as a String, and the first String function on it
+// threw and killed the Elm scheduler. The sockets ask for ArrayBuffers
+// (binaryType) so this can decode synchronously; anything else that is not a
+// string, which could only come from a WebSocket that ignores binaryType, is
+// dropped (null).
+var _LamderaWebsocket_text = function(data)
+{
+    if (typeof data === 'string') {
+        return data;
+    }
+    if (typeof TextDecoder !== 'undefined' && (data instanceof ArrayBuffer || ArrayBuffer.isView(data))) {
+        return new TextDecoder().decode(data);
+    }
+    return null;
+}
+
 // Queues data sent while the socket is still connecting, and sends it, in
 // order, once it opens. Like the first send (which opens the socket), the
 // task has already succeeded by then; if the socket never opens, the data is
@@ -107,6 +125,8 @@ var _LamderaWebsocket_sendString = F3(function(router, connection, data)
             }
             else {
                 websocketData.websocket = new WebSocket(connection.b);
+                // See _LamderaWebsocket_text.
+                websocketData.websocket.binaryType = 'arraybuffer';
 
                 websocketData.websocket.addEventListener('close', function (event) {
                     try {
@@ -217,9 +237,15 @@ var _LamderaWebsocket_listen = F2(function(router, connection)
             websocketData.websocket.addEventListener('message', function (event) {
                 try {
 
+                var text = _LamderaWebsocket_text(event.data);
+                if (text === null) {
+                    console.log("Websocket: dropped a binary message that could not be decoded as text");
+                    return;
+                }
+
                 __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, __Utils_Tuple2(
                     connection,
-                    __Websocket_dataEvent(event.data)
+                    __Websocket_dataEvent(text)
                 )));
 
                 }
@@ -238,6 +264,8 @@ var _LamderaWebsocket_listen = F2(function(router, connection)
                 }
                 else {
                     websocketData.websocket = new WebSocket(connection.b);
+                    // See _LamderaWebsocket_text.
+                    websocketData.websocket.binaryType = 'arraybuffer';
                     addListener();
                 }
             }
