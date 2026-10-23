@@ -190,7 +190,15 @@ describe('LamderaWebsocket Kernel', () => {
       const ws = listenOn(stubs, kernel, conn);
 
       ws._emit('error', { type: 'error' });
-      assert.equal(ws.isClosed, true);
+      assert.equal(kernel.websockets[conn.a].isClosed, true);
+    });
+
+    it('marks connection as closed on close', () => {
+      const conn = createConnection(stubs, kernel);
+      const ws = listenOn(stubs, kernel, conn);
+
+      ws._emit('close', { code: 1000, reason: '' });
+      assert.equal(kernel.websockets[conn.a].isClosed, true);
     });
 
     it('handles message events', () => {
@@ -248,6 +256,21 @@ describe('LamderaWebsocket Kernel', () => {
       assert.equal(result.$, 'succeed');
     });
 
+    it('succeeds for a handle that was never opened, and keeps it closed', () => {
+      const conn = createConnection(stubs, kernel);
+      A2(kernel.close, {}, conn);
+      let result;
+      stubs.callbacks[stubs.callbacks.length - 1]((val) => { result = val; });
+
+      assert.equal(result && result.$, 'succeed');
+      assert.equal(kernel.logs.length, 0, 'should not throw');
+
+      // Listening afterwards must not open a connection.
+      A2(kernel.listen, {}, conn);
+      stubs.callbacks[stubs.callbacks.length - 1](() => {});
+      assert.equal(kernel.websockets[conn.a].websocket, null);
+    });
+
     it('succeeds for unknown connection', () => {
       const fakeConn = { a: 'nonexistent', b: 'ws://localhost' };
       const router = {};
@@ -256,6 +279,42 @@ describe('LamderaWebsocket Kernel', () => {
       stubs.callbacks[stubs.callbacks.length - 1]((val) => { result = val; });
 
       assert.equal(result.$, 'succeed');
+    });
+  });
+
+  describe('sendString', () => {
+    function send(conn, data) {
+      A3(kernel.sendString, {}, conn, data);
+      let result;
+      stubs.callbacks[stubs.callbacks.length - 1]((val) => { result = val; });
+      return result;
+    }
+
+    it('fails with ConnectionClosed after the connection closed', () => {
+      const conn = createConnection(stubs, kernel);
+      const ws = listenOn(stubs, kernel, conn);
+      ws._emit('close', { code: 4000, reason: 'bye' });
+
+      const result = send(conn, 'late');
+      assert.equal(result && result.$, 'fail');
+      assert.equal(result.val.$, 'ConnectionClosed');
+      assert.deepEqual(ws._sent, []);
+    });
+
+    it('fails with ConnectionClosed after close', () => {
+      const conn = createConnection(stubs, kernel);
+      listenOn(stubs, kernel, conn);
+      A2(kernel.close, {}, conn);
+      stubs.callbacks[stubs.callbacks.length - 1](() => {});
+
+      const result = send(conn, 'late');
+      assert.equal(result && result.$, 'fail');
+    });
+
+    it('fails with ConnectionClosed for an unknown handle', () => {
+      const result = send({ a: 'nonexistent', b: 'ws://localhost' }, 'x');
+      assert.equal(result && result.$, 'fail');
+      assert.equal(kernel.logs.length, 0, 'should not throw');
     });
   });
 

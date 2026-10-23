@@ -55,7 +55,10 @@ var _LamderaWebsocket_sendString = F3(function(router, connection, data)
 	    try {
 
 	    var websocketData = _LamderaWebsocket_websockets[connection.a];
-	    if (websocketData || websocketData.isClosed) {
+	    // This used to be `websocketData || websocketData.isClosed`, which is
+	    // true for every known handle, closed or not, and throws for an unknown
+	    // one (a handle from before a page reload), so the task never completed.
+	    if (websocketData && !websocketData.isClosed) {
 	        if (websocketData.websocket) {
                 websocketData.websocket.send(data);
             }
@@ -65,7 +68,7 @@ var _LamderaWebsocket_sendString = F3(function(router, connection, data)
                 websocketData.websocket.addEventListener('close', function (event) {
                     try {
 
-                    websocketData.websocket.isClosed = true;
+                    websocketData.isClosed = true;
                     console.log("Websocket: close happened in _LamderaWebsocket_sendString");
                     console.log(event);
 
@@ -78,7 +81,7 @@ var _LamderaWebsocket_sendString = F3(function(router, connection, data)
                 websocketData.websocket.addEventListener('error', function (event) {
                     try {
 
-                    websocketData.websocket.isClosed = true;
+                    websocketData.isClosed = true;
                     console.log("Websocket: error happened in _LamderaWebsocket_sendString");
                     console.log(event);
 
@@ -130,7 +133,7 @@ var _LamderaWebsocket_listen = F2(function(router, connection)
             websocketData.websocket.addEventListener('close', function (event) {
                 try {
 
-                websocketData.websocket.isClosed = true;
+                websocketData.isClosed = true;
                 console.log("Websocket: close happened in _LamderaWebsocket_listen");
                 console.log(event);
                 __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, __Utils_Tuple2(
@@ -147,7 +150,7 @@ var _LamderaWebsocket_listen = F2(function(router, connection)
             websocketData.websocket.addEventListener('error', function (event) {
                 try {
 
-                websocketData.websocket.isClosed = true;
+                websocketData.isClosed = true;
                 console.log("Websocket: error happened in _LamderaWebsocket_listen");
                 console.log(event);
                 // Error events are not CloseEvents — they don't have .code/.reason.
@@ -227,7 +230,12 @@ var _LamderaWebsocket_close = F2(function(router, connection) {
         console.log("Websocket: connection closed by user");
 
         if (websocketData) {
-            websocketData.websocket.close();
+            // A handle that was never listened to or sent on has no socket yet.
+            // close() used to throw on it, so the task never completed, the
+            // handle was not marked closed, and a later listen opened it.
+            if (websocketData.websocket) {
+                websocketData.websocket.close();
+            }
             websocketData.isClosed = true;
 
             callback(__Scheduler_succeed(0));
