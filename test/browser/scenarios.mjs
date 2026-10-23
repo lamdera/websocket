@@ -243,7 +243,9 @@ export const scenarios = [
       // String. The probe's String.toUpper throws, which kills the Elm
       // scheduler, so the next frame is never delivered.
       [onBrowsers(['served', 'master', 'pr2'])]: [created(), data({ raw: '<[object Blob]>' })],
-      'served@node,master@node,pr2@node': [created(), data({ raw: '<[object Uint8Array]>' })],
+      // On node the frame can arrive, and the scheduler die, before the app
+      // has even reported its created message.
+      'served@node,master@node,pr2@node': { anyOf: [[created(), data({ raw: '<[object Uint8Array]>' })], []] },
     },
     crashes: { [OLD]: true },
   },
@@ -429,12 +431,13 @@ export const scenarios = [
     expect: [created(), closeDone(), closed('AbnormalClosure')],
     known: (version, platform) => {
       // Chromium and WebKit fire `error` synchronously inside close(), so
-      // master's crash happens before close() even returns. ws on node does
+      // master's crash happens around the time close() returns (racy:
+      // sometimes the close task's message still gets out). ws on node does
       // too, so served's close() throws there (the kernel swallows it, and
       // the close task never completes), and master dies before the app has
       // even handled its created message.
       if (version === 'master' && platform === 'node') return { anyOf: [[], [created()]] };
-      if (version === 'master' && platform !== 'firefox') return [created()];
+      if (version === 'master' && platform !== 'firefox') return { anyOf: [[created()], [created(), closeDone()]] };
       if (version === 'served' && platform === 'node') return [created(), closed('AbnormalClosure')];
       return errorThenClose([created(), closeDone()])(version, platform);
     },
