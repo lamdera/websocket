@@ -290,6 +290,41 @@ describe('LamderaWebsocket Kernel', () => {
       return result;
     }
 
+    it('sends on an open socket and completes', () => {
+      const conn = createConnection(stubs, kernel);
+      const ws = listenOn(stubs, kernel, conn);
+
+      const result = send(conn, 'hello');
+      assert.equal(result && result.$, 'succeed');
+      assert.deepEqual(ws._sent, ['hello']);
+    });
+
+    it('queues sends while connecting and sends them in order once open', () => {
+      const conn = createConnection(stubs, kernel);
+      const ws = listenOn(stubs, kernel, conn);
+      ws.readyState = 0;
+      ws.send = function () { throw new Error('InvalidStateError'); };
+
+      assert.equal(send(conn, 'a').$, 'succeed');
+      assert.equal(send(conn, 'b').$, 'succeed');
+
+      delete ws.send;
+      ws.readyState = 1;
+      ws._emit('open', {});
+      assert.deepEqual(ws._sent, ['a', 'b']);
+      assert.equal(kernel.logs.length, 0, 'should not throw');
+    });
+
+    it('fails with ConnectionClosed on a closing socket', () => {
+      const conn = createConnection(stubs, kernel);
+      const ws = listenOn(stubs, kernel, conn);
+      ws.readyState = 2;
+
+      const result = send(conn, 'late');
+      assert.equal(result && result.$, 'fail');
+      assert.deepEqual(ws._sent, []);
+    });
+
     it('fails with ConnectionClosed after the connection closed', () => {
       const conn = createConnection(stubs, kernel);
       const ws = listenOn(stubs, kernel, conn);

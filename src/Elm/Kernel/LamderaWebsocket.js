@@ -48,6 +48,32 @@ var _LamderaWebsocket_createHandle = F2(function(router, url)
 
 
 
+// Queues data sent while the socket is still connecting, and sends it, in
+// order, once it opens. Like the first send (which opens the socket), the
+// task has already succeeded by then; if the socket never opens, the data is
+// dropped, and the app gets the close message.
+var _LamderaWebsocket_sendWhenOpen = function(websocketData, data)
+{
+    if (!websocketData.queue) {
+        websocketData.queue = [];
+        websocketData.websocket.addEventListener('open', function (event) {
+            try {
+
+            var queue = websocketData.queue;
+            websocketData.queue = null;
+            for (var i = 0; i < queue.length; i++) {
+                websocketData.websocket.send(queue[i]);
+            }
+
+            }
+            catch (error) {
+                console.log("Websocket: Exception in _LamderaWebsocket_sendWhenOpen open listener. " + error);
+            }
+        });
+    }
+    websocketData.queue.push(data);
+}
+
 var _LamderaWebsocket_sendString = F3(function(router, connection, data)
 {
 	return __Scheduler_binding(function(callback)
@@ -60,7 +86,24 @@ var _LamderaWebsocket_sendString = F3(function(router, connection, data)
 	    // one (a handle from before a page reload), so the task never completed.
 	    if (websocketData && !websocketData.isClosed) {
 	        if (websocketData.websocket) {
-                websocketData.websocket.send(data);
+                // This used to call send() whatever the state and never call
+                // back, so the task never completed, and on a CONNECTING socket
+                // send() throws, so the data was lost as well.
+                var readyState = websocketData.websocket.readyState;
+                if (readyState === 1) {
+                    // OPEN
+                    websocketData.websocket.send(data);
+                    callback(__Scheduler_succeed(0));
+                }
+                else if (readyState === 0) {
+                    // CONNECTING: send once open, like the first send below.
+                    _LamderaWebsocket_sendWhenOpen(websocketData, data);
+                    callback(__Scheduler_succeed(0));
+                }
+                else {
+                    // CLOSING or CLOSED, before the close event has arrived.
+                    callback(__Scheduler_fail(__Websocket_connectionClosed));
+                }
             }
             else {
                 websocketData.websocket = new WebSocket(connection.b);
